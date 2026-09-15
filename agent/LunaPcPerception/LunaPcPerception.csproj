@@ -2,11 +2,14 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Platforms>AnyCPU</Platforms>
+    <AssemblyName>LunaPcPerception</AssemblyName>
+    <RootNamespace>LunaPcPerception</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Windows.Extensions" Version="8.0.0" />
+    <PackageReference Include="UIAutomationClient" Version="8.0.0" />
+    <PackageReference Include="UIAutomationTypes" Version="8.0.0" />
   </ItemGroup>
 </Project>
