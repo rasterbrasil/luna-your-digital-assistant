@@ -4,9 +4,11 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
@@ -25,12 +27,14 @@ class LunaAccessibilityService : AccessibilityService() {
             .put("package", root?.packageName ?: JSONObject.NULL)
             .put("className", root?.className ?: JSONObject.NULL)
             .put("windowTitle", root?.text ?: JSONObject.NULL)
+            .put("windowCount", windows.size)
         if (root != null) result.put("tree", nodeToJson(root, 0))
         return result
     }
 
     fun back(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
     fun home(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
+    fun recents(): Boolean = performGlobalAction(GLOBAL_ACTION_RECENTS)
 
     fun tap(x: Float, y: Float): Boolean {
         val path = Path().apply { moveTo(x, y); lineTo(x, y) }
@@ -39,6 +43,16 @@ class LunaAccessibilityService : AccessibilityService() {
             .build()
         return dispatchGesture(gesture, null, null)
     }
+
+    fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long = 350): Boolean {
+        val path = Path().apply { moveTo(x1, y1); lineTo(x2, y2) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(100, 2000)))
+            .build()
+        return dispatchGesture(gesture, null, null)
+    }
+
+    fun clickByText(text: String): Boolean = findNode(text)?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
 
     fun type(text: String): Boolean {
         val node = findFocusedEditable(rootInActiveWindow) ?: return false
@@ -51,6 +65,20 @@ class LunaAccessibilityService : AccessibilityService() {
         return runCatching { startActivity(intent); true }.getOrDefault(false)
     }
 
+    private fun findNode(text: String): AccessibilityNodeInfo? {
+        val root = rootInActiveWindow ?: return null
+        root.findAccessibilityNodeInfosByText(text).firstOrNull { it.isVisibleToUser && it.isEnabled }
+            ?: findByContentDescription(root, text)
+    }
+
+    private fun findByContentDescription(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
+        if (node.contentDescription?.toString().equals(text, ignoreCase = true)) return node
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let { child -> findByContentDescription(child, text)?.let { return it } }
+        }
+        return null
+    }
+
     private fun findFocusedEditable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
         if (node.isEditable && (node.isFocused || node.isFocusable)) return node
@@ -59,6 +87,8 @@ class LunaAccessibilityService : AccessibilityService() {
     }
 
     private fun nodeToJson(node: AccessibilityNodeInfo, depth: Int): JSONObject {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
         val item = JSONObject()
             .put("id", UUID.randomUUID().toString())
             .put("className", node.className ?: JSONObject.NULL)
@@ -69,8 +99,9 @@ class LunaAccessibilityService : AccessibilityService() {
             .put("enabled", node.isEnabled)
             .put("focused", node.isFocused)
             .put("visible", node.isVisibleToUser)
-        if (depth >= 5) return item
-        val children = org.json.JSONArray()
+            .put("bounds", JSONObject().put("left", bounds.left).put("top", bounds.top).put("right", bounds.right).put("bottom", bounds.bottom))
+        if (depth >= 6) return item
+        val children = JSONArray()
         for (i in 0 until node.childCount) node.getChild(i)?.let { children.put(nodeToJson(it, depth + 1)) }
         return item.put("children", children)
     }
