@@ -5,5 +5,4 @@
     android:accessibilityFlags="flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
-    android:notificationTimeout="100"
-    android:description="Permite que a Luna observe e execute ações no Android." />
+    android:notificationTimeout="100" />
