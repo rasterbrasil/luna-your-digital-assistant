@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
 
 namespace LunaPcAgent;
@@ -17,6 +16,7 @@ internal static class Program
         }
 
         var agent = new WindowsActionAgent(token);
+        var autonomy = new AutonomyEngine(agent);
         using var listener = new HttpListener();
         listener.Prefixes.Add("http://127.0.0.1:38764/");
         listener.Start();
@@ -25,15 +25,19 @@ internal static class Program
         Console.WriteLine("GET  /health");
         Console.WriteLine("POST /observe");
         Console.WriteLine("POST /action");
+        Console.WriteLine("POST /autonomy");
 
         while (true)
         {
             var context = await listener.GetContextAsync();
-            _ = Task.Run(() => HandleAsync(context, agent));
+            _ = Task.Run(() => HandleAsync(context, agent, autonomy));
         }
     }
 
-    private static async Task HandleAsync(HttpListenerContext context, WindowsActionAgent agent)
+    private static async Task HandleAsync(
+        HttpListenerContext context,
+        WindowsActionAgent agent,
+        AutonomyEngine autonomy)
     {
         try
         {
@@ -49,7 +53,7 @@ internal static class Program
 
             if (context.Request.HttpMethod == "GET" && context.Request.Url?.AbsolutePath == "/health")
             {
-                await WriteJson(context, new { ok = true, protocol = "LUNA-PC/1", agent = "online" });
+                await WriteJson(context, new { ok = true, protocol = "LUNA-PC/1", agent = "online", autonomy = "LUNA-AUTONOMY/1" });
                 return;
             }
 
@@ -76,6 +80,20 @@ internal static class Program
 
                 var result = agent.Execute(request);
                 await WriteJson(context, result, result.Ok ? 200 : 400);
+                return;
+            }
+
+            if (context.Request.HttpMethod == "POST" && context.Request.Url?.AbsolutePath == "/autonomy")
+            {
+                var plan = await JsonSerializer.DeserializeAsync<AutonomyPlan>(context.Request.InputStream);
+                if (plan is null || string.IsNullOrWhiteSpace(plan.Goal) || plan.Steps.Count == 0)
+                {
+                    await WriteJson(context, new { ok = false, error = "invalid_plan" }, 400);
+                    return;
+                }
+
+                var result = autonomy.Run(plan);
+                await WriteJson(context, result, result.Ok ? 200 : 409);
                 return;
             }
 
